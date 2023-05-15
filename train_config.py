@@ -17,16 +17,16 @@ train_args = dict({
 "clip_train_batch_size": 64,
 "train_batch_size": 4,
 "num_train_epochs": 100,
-"clip_train_steps": 20,
+"clip_train_epochs": 20,
 "clip_train_lr": 8.0e-04,
-"max_train_steps": 140,
+"max_train_steps": 50,
 "gradient_accumulation_steps": 1,
 "gradient_checkpointing": True,
 "learning_rate": 7.0e-04,
 "scale_lr": False,
 "lr_scheduler": "constant",
 "lr_warmup_steps": 0,
-"dataloader_num_workers": 4, # set to 0 if this causes issues
+"dataloader_num_workers": 0, # set to 0 if this causes issues
 "adam_beta1": 0.9,
 "adam_beta2": 0.999,
 "adam_weight_decay": 1e-2,
@@ -48,6 +48,9 @@ train_args = dict({
 "what_to_train": "layer",
 "max_grad_norm": 1,
 "clip_max_grad_norm": 1,
+"num_vectors": 1,
+"pad_tokens": True,
+"cache_latents": True,
 })
 
 train_args = SimpleNamespace(**train_args)

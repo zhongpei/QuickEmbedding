@@ -92,12 +92,12 @@ def main(args):
 
         if args.initializer_token is not None:
             # Convert the initializer_token, placeholder_token to ids
-            token_ids = tokenizer.encode(args.initializer_token, add_special_tokens=False)
+            initializer_token_id = tokenizer(args.initializer_token, add_special_tokens=False).input_ids
             # Check if initializer_token is a single token or a sequence of tokens
-            if len(token_ids) > 1:
+            if len(initializer_token_id) > 1:
                 raise ValueError("The initializer token must be a single token.")
 
-            initializer_token_id = token_ids.input_ids
+            initializer_token_id = initializer_token_id
 
         if args.num_vectors > 1:
             initializer_token_id = [initializer_token_id] * args.num_vectors
@@ -155,6 +155,8 @@ def main(args):
         eps=args.adam_epsilon,
     )
 
+    #
+
     # Dataset and DataLoaders creation:
     train_dataset = TextualInversionDataset(
         data_root=args.train_data_dir,
@@ -174,6 +176,13 @@ def main(args):
         train_dataset, batch_size=args.clip_train_batch_size, shuffle=True, num_workers=args.dataloader_num_workers
     )
 
+    clip_max_train_steps = args.clip_train_epochs * len(train_dataloader)
+    lr_scheduler = get_scheduler(
+        args.lr_scheduler,
+        optimizer=optimizer,
+        num_warmup_steps=args.lr_warmup_steps * args.gradient_accumulation_steps,
+        num_training_steps=clip_max_train_steps * args.gradient_accumulation_steps,
+    )
 
     # We need to initialize the trackers we use, and also store our configuration.
     # The trackers initializes automatically on the main process.
@@ -198,7 +207,7 @@ def main(args):
     # assume 49407 max
     index_no_updates = torch.arange(len(tokenizer)) <= 49407
 
-    pbar = tqdm(range(args.clip_train_steps))
+    pbar = tqdm(range(args.clip_train_epochs))
     for epoch in pbar:
         text_encoder.train()
         for step, batch in enumerate(train_dataloader):
@@ -217,17 +226,17 @@ def main(args):
                 sim = -torch.matmul(text_embeds, im_embed.t())
                 #only similarity with correct pairings needed
                 if args.zero_out_mismatches:
-                    mask = torch.diag(torch.ones(sim.shape[0])).float()
+                    mask = torch.diag(torch.ones(sim.shape[0])).float().to(sim.device)
                     sim = sim * mask
                 loss = sim.mean()
 
             accelerator.backward(loss)
             if accelerator.sync_gradients:
                 if args.clip_max_grad_norm is not None:
-                    accelerator.clip_grad_norm_(text_encoder.get_input_embeddings().parameters())
+                    accelerator.clip_grad_norm_(text_encoder.get_input_embeddings().parameters(), args.clip_max_grad_norm)
 
             optimizer.step()
-            #lr_scheduler.step()
+            lr_scheduler.step()
             optimizer.zero_grad()
 
             pbar.set_description(f"Epoch {epoch}, loss: {loss.mean().detach().item():.4f}")
@@ -379,7 +388,7 @@ def main(args):
                     latents = vae.encode(batch["pixel_values"].to(dtype=weight_dtype)).latent_dist.sample().detach()
                     latents = latents * 0.18125
                 else:
-                    latents = batch["latent"].to(dtype=weight_dtype).detach()
+                    latents = batch["latents"].to(dtype=weight_dtype).detach()
 
                 # Sample noise that we'll add to the latents
                 noise = torch.randn_like(latents)

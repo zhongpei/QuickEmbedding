@@ -20,3 +20,11 @@ That's really it, you can modify training settings in train_config.py
 # Inference
 For inference, use the load_embeds function in utils.py which takes a Diffusers StableDiffusionPipeline and a directory where you keep your embeddings as input
 and voila
+
+There are some bugs floating around as I do not have a ton of time to work on this, but feel free to make an issue or a pr if you find anything!
+
+TODO
+- [ ] support for pushing to HF hub
+- [ ] test to see validation works
+- [ ] support multiple token training
+- [ ] lr scheduling for first phase, better organizing diff phases

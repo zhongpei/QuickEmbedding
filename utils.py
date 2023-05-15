@@ -36,7 +36,7 @@ else:
 
 def load_embeds(pipe, embeddings_dir):
     paths = os.listdir(embeddings_dir)
-    paths = [p for p in paths if p.endswith(".pt")] #TODO depends on what we use
+    paths = [p for p in paths if p.endswith(".bin")] #TODO depends on what we use
 
     #TODO for now store the placeholder token in filename, issue with illegal characters
     num_added_tokens = 0
@@ -202,6 +202,7 @@ class TextualInversionDataset(Dataset):
         self.initializer_token = initializer_token
         self.vision_model_path = vision_model_path
         self.pad_tokens = pad_tokens
+        #self.what_to_train = "layer"
 
         self.subtokens = subtokens
         if subtokens is not None:
@@ -230,7 +231,7 @@ class TextualInversionDataset(Dataset):
                 self.captions = [file_path.split(".")[0] for file_path in os.listdir(self.data_root) if file_path.endswith(".jpeg") or file_path.endswith(".png") or file_path.endswith(".jpg")]
 
         else:
-            self.caption = None
+            self.captions = None
 
         self.num_images = len(self.image_paths)
         self._length = self.num_images
@@ -292,8 +293,8 @@ class TextualInversionDataset(Dataset):
                     image = self.flip_transform(image)
                     image = np.array(image).astype(np.uint8)
                     image = (image / 127.5 - 1.0).astype(np.float32)
-                    image = torch.from_numpy(image).permute(2, 0, 1).to(torch.float16).to("cuda")
-                    latents = vae.encode(image).latent_dist.sample()
+                    image = torch.from_numpy(image).permute(2, 0, 1).to(torch.float16).to("cuda").unsqueeze(0)
+                    latents = vae.encode(image).latent_dist.sample().squeeze(0)
                     latents = latents * 0.18125
                     self.latents.append(latents)
         else:
@@ -329,8 +330,8 @@ class TextualInversionDataset(Dataset):
                 return_tensors="pt",
             ).input_ids[0]
 
-            if self.what_to_train != "layer":
-                example["token_position"] = torch.where(example["input_ids"] == self.initializer_token_id)[0][0].item()
+            # if self.what_to_train != "layer":
+            #     example["token_position"] = torch.where(example["input_ids"] == self.initializer_token_id)[0][0].item()
 
             example["clip_embeds"] = self.clip_embeddings[i % self.num_images]
             return example
@@ -376,6 +377,28 @@ class TextualInversionDataset(Dataset):
                 image = (image / 127.5 - 1.0).astype(np.float32)
                 example["pixel_values"] = torch.from_numpy(image).permute(2, 0, 1)
             else:
+                if self.captions is None:
+                    if self.num_vectors > 1:
+                        assert isinstance(self.subtokens, list)
+                        text = random.choice(self.templates)
+                        begin, end = text.replace("{", "").split("}")
+                        newstr = ""
+                        for tok in self.subtokens:
+                            newstr = newstr + tok + " "
+                        text = newstr + end
+                    else:
+                        text = random.choice(self.templates).format(self.placeholder_token)
+                else:
+                    text = self.captions[i % self.num_images]
+
+                example["input_ids"] = self.tokenizer(
+                    text,
+                    padding="max_length" if self.pad_tokens else "do_not_pad",
+                    truncation=True,
+                    max_length=self.tokenizer.model_max_length,
+                    return_tensors="pt",
+                ).input_ids[0]
+
                 example["latents"] = self.latents[i % self.num_images]
 
             return example
