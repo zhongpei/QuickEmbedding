@@ -1,5 +1,5 @@
 from types import SimpleNamespace
-arg = dict({
+train_args = dict({
 "save_steps": 500,
 "only_save_embeds": False,
 "clip_model_path": "openai/clip-vit-large-patch14",
@@ -53,7 +53,7 @@ arg = dict({
 "clip_max_grad_norm": 1,
 })
 
-args = SimpleNamespace(**arg)
+train_args = SimpleNamespace(**train_args)
 
 
 
