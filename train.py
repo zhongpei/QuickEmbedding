@@ -216,8 +216,9 @@ def main(args):
                 im_embed = im_embed / im_embed.norm(p=2, dim=-1, keepdim=True)
                 sim = -torch.matmul(text_embeds, im_embed.t())
                 #only similarity with correct pairings needed
-                mask = torch.diag(torch.ones(sim.shape[0])).float()
-                sim = sim * mask
+                if args.zero_out_mismatches:
+                    mask = torch.diag(torch.ones(sim.shape[0])).float()
+                    sim = sim * mask
                 loss = sim.mean()
 
             accelerator.backward(loss)
