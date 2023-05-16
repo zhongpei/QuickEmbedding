@@ -211,7 +211,7 @@ class TextualInversionDataset(Dataset):
             self.num_vectors = 1
 
         #TODO need better way to recognize picture extension
-        self.image_paths = [os.path.join("./traindata", file_path) for file_path in os.listdir("./traindata") if file_path.endswith(".jpeg") or file_path.endswith(".png") or file_path.endswith(".jpg")]
+        self.image_paths = [os.path.join(self.data_root, file_path) for file_path in os.listdir(self.data_root) if file_path.endswith(".jpeg") or file_path.endswith(".png") or file_path.endswith(".jpg")]
         if custom_prompts:
             # check if there are text files to pull from
             txt_file_exists = False
