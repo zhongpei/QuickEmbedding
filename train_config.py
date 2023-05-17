@@ -18,7 +18,7 @@ train_args = dict({
 "train_batch_size": 4,
 "num_train_epochs": 100,
 "clip_train_epochs": 20,
-"clip_train_lr": 8.0e-04,
+"clip_train_lr": 1.0e-02,
 "max_train_steps": 50,
 "gradient_accumulation_steps": 4,
 "gradient_checkpointing": True,
