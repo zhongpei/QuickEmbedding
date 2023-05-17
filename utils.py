@@ -125,10 +125,14 @@ def spherical_dist_loss(x, y):
     return (x - y).norm(dim=-1).div(2).arcsin().pow(2).mul(2)
 
 def save_progress(text_encoder, placeholder_token_id, accelerator, args, save_path, subtokens, logger):
+    sd_version = "v1" if "runway" in args.pretrained_model_name_or_path else "v2"
+    logger.info(f"Saving embeddings  {sd_version}")
+
     if isinstance(placeholder_token_id, list):
-        logger.info("Saving embeddings")
+
         learned_embeds = accelerator.unwrap_model(text_encoder).get_input_embeddings().weight[placeholder_token_id]
-        sd_version = "v1" if "runway" in args.pretrained_model_name_or_path else "v2"
+
+
         learned_embeds_dict = {"placeholder_token": args.placeholder_token,
                                "subtokens" : {},
                                "SD_version":sd_version}
@@ -136,13 +140,17 @@ def save_progress(text_encoder, placeholder_token_id, accelerator, args, save_pa
             learned_embeds_dict["subtokens"][tok] = learned_embeds[i].detach().cpu()
         torch.save(learned_embeds_dict, save_path)
     else:
-        logger.info("Saving embeddings")
+
         learned_embeds = accelerator.unwrap_model(text_encoder).get_input_embeddings().weight[placeholder_token_id]
         #TODO i imagine we're going to be using custom models with this so will need a better solution
-        sd_version = "v1" if "runway" in args.pretrained_model_name_or_path else "v2"
-        learned_embeds_dict = {"placeholder_token": args.placeholder_token,
-                               "embedding": learned_embeds.detach().cpu(),
-                               "SD_version":sd_version}
+
+        logger.info(f"one")
+        #learned_embeds_dict = {"placeholder_token": args.placeholder_token,
+        #                       "embedding": learned_embeds.detach().cpu(),
+        #                       "SD_version":sd_version}
+        learned_embeds_dict = {
+            args.placeholder_token: learned_embeds.detach().cpu(),
+        }
         torch.save(learned_embeds_dict, save_path)
 
 def sliding_cutouts(image, num_cuts=4, cut_size=224):

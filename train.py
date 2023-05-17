@@ -24,14 +24,14 @@ from diffusers import (
     UNet2DConditionModel,
 )
 
-from diffusers.optimization import get_scheduler
+from diffusers.optimization import get_scheduler, get_cosine_with_hard_restarts_schedule_with_warmup
 from diffusers.utils.import_utils import is_xformers_available
 
 from train_config import train_args
 from utils import save_progress, spherical_dist_loss, TextualInversionDataset
 
-
 logger = get_logger(__name__)
+
 
 def main(args):
     logging_dir = os.path.join(args.output_dir, args.logging_dir)
@@ -135,7 +135,6 @@ def main(args):
             # The dropout cannot be != 0 so it doesn't matter if we are in eval or train mode.
             text_encoder.gradient_checkpointing_enable()
 
-
     # Enable TF32 for faster training on Ampere GPUs,
     # cf https://pytorch.org/docs/stable/notes/cuda.html#tensorfloat-32-tf32-on-ampere-devices
     if args.allow_tf32:
@@ -143,7 +142,7 @@ def main(args):
 
     if args.scale_lr:
         args.learning_rate = (
-            args.learning_rate * args.gradient_accumulation_steps * args.train_batch_size * accelerator.num_processes
+                args.learning_rate * args.gradient_accumulation_steps * args.train_batch_size * accelerator.num_processes
         )
 
     # Initialize the optimizer
@@ -177,12 +176,21 @@ def main(args):
     )
 
     clip_max_train_steps = args.clip_train_epochs * len(train_dataloader)
-    lr_scheduler = get_scheduler(
-        args.lr_scheduler,
-        optimizer=optimizer,
-        num_warmup_steps=args.lr_warmup_steps * args.gradient_accumulation_steps,
-        num_training_steps=clip_max_train_steps * args.gradient_accumulation_steps,
-    )
+    if args.lr_scheduler == "cosine_with_restarts":
+        logger.info(f"Using warmup and cosine decay LR scheduler with restarts lr_num_cycles: {args.lr_num_cycles}")
+        lr_scheduler = get_cosine_with_hard_restarts_schedule_with_warmup(
+            optimizer,
+            num_warmup_steps=args.lr_warmup_steps * args.gradient_accumulation_steps,
+            num_training_steps=clip_max_train_steps * args.gradient_accumulation_steps,
+            num_cycles=args.lr_num_cycles,
+        )
+    else:
+        lr_scheduler = get_scheduler(
+            args.lr_scheduler,
+            optimizer=optimizer,
+            num_warmup_steps=args.lr_warmup_steps * args.gradient_accumulation_steps,
+            num_training_steps=clip_max_train_steps * args.gradient_accumulation_steps,
+        )
 
     # We need to initialize the trackers we use, and also store our configuration.
     # The trackers initializes automatically on the main process.
@@ -224,7 +232,7 @@ def main(args):
                 text_embeds = text_embeds / text_embeds.norm(p=2, dim=-1, keepdim=True)
                 im_embed = im_embed / im_embed.norm(p=2, dim=-1, keepdim=True)
                 sim = -torch.matmul(text_embeds, im_embed.t())
-                #only similarity with correct pairings needed
+                # only similarity with correct pairings needed
                 if args.zero_out_mismatches:
                     mask = torch.diag(torch.ones(sim.shape[0])).float().to(sim.device)
                     sim = sim * mask
@@ -233,7 +241,8 @@ def main(args):
             accelerator.backward(loss)
             if accelerator.sync_gradients:
                 if args.clip_max_grad_norm is not None:
-                    accelerator.clip_grad_norm_(text_encoder.get_input_embeddings().parameters(), args.clip_max_grad_norm)
+                    accelerator.clip_grad_norm_(text_encoder.get_input_embeddings().parameters(),
+                                                args.clip_max_grad_norm)
 
             optimizer.step()
             lr_scheduler.step()
@@ -243,9 +252,8 @@ def main(args):
 
             # Let's make sure we don't update any embedding weights besides the newly added token
             with torch.no_grad():
-                accelerator.unwrap_model(text_encoder).get_input_embeddings().weight[index_no_updates] = orig_embeds_params[index_no_updates]
-
-
+                accelerator.unwrap_model(text_encoder).get_input_embeddings().weight[index_no_updates] = \
+                orig_embeds_params[index_no_updates]
 
     # Dataset and DataLoaders creation:
     train_dataset = TextualInversionDataset(
@@ -305,7 +313,6 @@ def main(args):
             first_epoch = global_step // num_update_steps_per_epoch
             resume_step = resume_global_step % (num_update_steps_per_epoch * args.gradient_accumulation_steps)
 
-
     # For mixed precision training we cast the unet and vae weights to half-precision
     # as these models are only used for inference, keeping weights in full precision is not required.
     weight_dtype = torch.float32
@@ -313,7 +320,6 @@ def main(args):
         weight_dtype = torch.float16
     elif accelerator.mixed_precision == "bf16":
         weight_dtype = torch.bfloat16
-
 
     # remake the optimizer
     optimizer = torch.optim.AdamW(
@@ -353,11 +359,9 @@ def main(args):
         text_encoder.gradient_checkpointing_enable()
         unet.enable_gradient_checkpointing()
 
-
     # Move vae and unet to device and cast to weight_dtype
     unet.requires_grad_(False)
     unet.to(accelerator.device, dtype=weight_dtype)
-
 
     if args.enable_xformers_memory_efficient_attention:
         if is_xformers_available():
@@ -435,7 +439,6 @@ def main(args):
                         index_no_updates
                     ] = orig_embeds_params[index_no_updates]
 
-
             # Checks if the accelerator has performed an optimization step behind the scenes
             if accelerator.sync_gradients:
                 progress_bar.update(1)
@@ -508,6 +511,7 @@ def main(args):
         save_progress(text_encoder, placeholder_token_id, accelerator, args, save_path, subtokens, logger)
 
     accelerator.end_training()
+
 
 if __name__ == "__main__":
     main(train_args)
