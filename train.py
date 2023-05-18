@@ -216,7 +216,14 @@ def main(args):
             # Get the text embedding for conditioning
             cond_tok_ids = batch["input_ids"].to(accelerator.device)
             im_embed = batch["clip_embeds"].to(accelerator.device).to(dtype=torch.float32).detach()
-            text_embeds = text_encoder(cond_tok_ids).text_embeds.to(dtype=torch.float32)
+            text_embeds = text_encoder(cond_tok_ids).last_hidden_state.to(dtype=torch.float32)
+
+            # create a mask for indexing the EOF token, as Okaris noted, adding new tokens to vocab throws this process off
+            # zero out all non-eof tokens
+            mask = torch.where(cond_tok_ids==49407,cond_tok_ids,0)
+            # this is how we'll index the pooler output
+            text_embeds = text_embeds[torch.arange(text_embeds.shape[0]), mask.argmax(dim=-1)]
+            text_embeds = text_encoder.text_projection(text_embeds)
 
             if args.spherical_clip_loss == True:
                 loss = spherical_dist_loss(text_embeds, im_embed)

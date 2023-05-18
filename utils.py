@@ -261,7 +261,7 @@ class TextualInversionDataset(Dataset):
                     image = np.array(image).astype(np.float32) / 255.0
                     image = image[None].transpose(0, 3, 1, 2)
                     image = torch.from_numpy(image).to("cuda").to(torch.float16)
-                    cuts = sliding_cutouts(image, num_cuts=7, cut_size=224)
+                    cuts = sliding_cutouts(image, num_cuts=4, cut_size=224)
                     embeds = image_model(cuts).image_embeds.mean(dim=0)
                     self.clip_embeddings.append(embeds)
 
