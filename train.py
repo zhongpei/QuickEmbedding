@@ -345,13 +345,13 @@ def main(args):
     )
 
     if args.cache_latents == False:
-        vae = AutoencoderKL.from_pretrained(args.pretrained_model_name_or_path, subfolder="vae", revision=args.revision)
+        vae = AutoencoderKL.from_pretrained(args.pretrained_model_name_or_path, subfolder="vae")
         # Freeze vae and unet
         vae.requires_grad_(False)
         vae.to(accelerator.device, dtype=weight_dtype)
 
     unet = UNet2DConditionModel.from_pretrained(
-        args.pretrained_model_name_or_path, subfolder="unet", revision=args.revision
+        args.pretrained_model_name_or_path, subfolder="unet"
     )
 
     if args.gradient_checkpointing:
@@ -489,7 +489,6 @@ def main(args):
                 args.pretrained_model_name_or_path,
                 text_encoder=accelerator.unwrap_model(text_encoder),
                 tokenizer=tokenizer,
-                revision=args.revision,
                 torch_dtype=weight_dtype,
             )
             pipeline.scheduler = DPMSolverMultistepScheduler.from_config(pipeline.scheduler.config)
