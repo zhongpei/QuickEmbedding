@@ -15,7 +15,7 @@ train_args = dict({
 "resolution": 512,
 "center_crop": True,
 "clip_train_batch_size": 40,
-"clip_max_train_steps": 100,
+"clip_max_train_steps": 200,
 "clip_train_lr": 4.0e-02,
 "clip_phase_gradient_checkpointing": False,
 "clip_lr_scheduler": "linear",
