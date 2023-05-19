@@ -269,8 +269,7 @@ class TextualInversionDataset(Dataset):
 
         if vae_path is not None:
             with torch.no_grad():
-                #TODO set revision
-                vae = AutoencoderKL.from_pretrained(vae_path, subfolder="vae", revision="fp16").to("cuda").to(torch.float16).eval()
+                vae = AutoencoderKL.from_pretrained(vae_path, subfolder="vae").to("cuda").to(torch.float16).eval()
                 self.latents = []
                 for path in self.image_paths:
                     image = Image.open(path).convert("RGB")
