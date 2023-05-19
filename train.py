@@ -149,7 +149,7 @@ def main(args):
     # Initialize the optimizer
     optimizer = torch.optim.AdamW(
         text_encoder.get_input_embeddings().parameters(),
-        lr=args.learning_rate,
+        lr=args.clip_train_lr,
         betas=(args.adam_beta1, args.adam_beta2),
         weight_decay=args.adam_weight_decay,
         eps=args.adam_epsilon,
