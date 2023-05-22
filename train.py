@@ -45,6 +45,7 @@ def main(args):
 
     if args.report_to == "wandb":
         import wandb
+        wandb.init(project="textual_inversion",name=f"{args.placeholder_token}")
 
     # Make one log on every process with the configuration for debugging.
     logging.basicConfig(
@@ -173,30 +174,28 @@ def main(args):
         train_dataset, batch_size=args.clip_train_batch_size, shuffle=True, num_workers=args.dataloader_num_workers
     )
 
-
     # Scheduler and math around the number of training steps.
     clip_train_epochs = math.ceil(args.clip_max_train_steps / len(train_dataloader))
     if args.lr_scheduler == "cosine_with_restarts":
         logger.info(f"Using warmup and cosine decay LR scheduler with restarts lr_num_cycles: {args.lr_num_cycles}")
         lr_scheduler = get_cosine_with_hard_restarts_schedule_with_warmup(
             optimizer=optimizer,
-            num_warmup_steps=args.lr_warmup_steps ,
-            num_training_steps=args.clip_max_train_steps ,
+            num_warmup_steps=args.lr_warmup_steps,
+            num_training_steps=args.clip_max_train_steps,
             num_cycles=args.lr_num_cycles,
         )
     else:
         lr_scheduler = get_scheduler(
             args.clip_lr_scheduler,
             optimizer=optimizer,
-            num_warmup_steps=args.lr_warmup_steps ,
-            num_training_steps=args.clip_max_train_steps ,
+            num_warmup_steps=args.lr_warmup_steps,
+            num_training_steps=args.clip_max_train_steps,
         )
 
     # Prepare everything with our `accelerator`.
     text_encoder, optimizer, train_dataloader, lr_scheduler = accelerator.prepare(
         text_encoder, optimizer, train_dataloader, lr_scheduler
     )
-
 
     # We need to initialize the trackers we use, and also store our configuration.
     # The trackers initializes automatically on the main process.
@@ -208,6 +207,7 @@ def main(args):
     logger.info(f"  Instantaneous batch size per device = {args.clip_train_batch_size}")
     logger.info(f"  Gradient Accumulation steps = {args.gradient_accumulation_steps}")
     logger.info(f"  Total optimization steps = {args.clip_max_train_steps}")
+    logger.info(f"  Total epochs = {clip_train_epochs}")
     clip_global_step = 0
 
     # keep original embeddings as reference
@@ -220,6 +220,7 @@ def main(args):
 
     pbar = tqdm(range(args.clip_max_train_steps))
     pbar.set_description("Steps")
+
     for epoch in range(clip_train_epochs):
         text_encoder.train()
         for step, batch in enumerate(train_dataloader):
@@ -232,7 +233,7 @@ def main(args):
 
             # create a mask for indexing the EOF token, as Okaris noted, adding new tokens to vocab throws this process off
             # zero out all non-eof tokens
-            mask = torch.where(cond_tok_ids==49407,cond_tok_ids,0)
+            mask = torch.where(cond_tok_ids == 49407, cond_tok_ids, 0)
             # this is how we'll index the pooler output
             text_embeds = text_embeds[torch.arange(text_embeds.shape[0]), mask.argmax(dim=-1)]
             text_embeds = text_encoder.text_projection(text_embeds)
@@ -267,13 +268,12 @@ def main(args):
             # Let's make sure we don't update any embedding weights besides the newly added token
             with torch.no_grad():
 
-                accelerator.unwrap_model(text_encoder).get_input_embeddings().weight[index_no_updates] = orig_embeds_params[index_no_updates]
+                accelerator.unwrap_model(text_encoder).get_input_embeddings().weight[index_no_updates] = \
+                    orig_embeds_params[index_no_updates]
 
             clip_global_step += 1
             if clip_global_step >= args.clip_max_train_steps:
                 break
-
-
 
     # Dataset and DataLoaders creation:
     train_dataset = TextualInversionDataset(
@@ -380,8 +380,6 @@ def main(args):
             unet.enable_xformers_memory_efficient_attention()
         else:
             raise ValueError("xformers is not available. Make sure it is installed correctly")
-
-
 
     # Load scheduler and models
     noise_scheduler = DDPMScheduler.from_pretrained(args.pretrained_model_name_or_path, subfolder="scheduler")
