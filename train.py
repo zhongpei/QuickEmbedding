@@ -148,13 +148,11 @@ def main(args):
     # Initialize the optimizer
     optimizer = torch.optim.AdamW(
         text_encoder.get_input_embeddings().parameters(),
-        lr=args.learning_rate,
+        lr=args.clip_train_lr,
         betas=(args.adam_beta1, args.adam_beta2),
         weight_decay=args.adam_weight_decay,
         eps=args.adam_epsilon,
     )
-
-    #
 
     # Dataset and DataLoaders creation:
     train_dataset = TextualInversionDataset(
@@ -175,48 +173,54 @@ def main(args):
         train_dataset, batch_size=args.clip_train_batch_size, shuffle=True, num_workers=args.dataloader_num_workers
     )
 
-    clip_max_train_steps = args.clip_train_epochs * len(train_dataloader)
+
+    # Scheduler and math around the number of training steps.
+    clip_train_epochs = math.ceil(args.clip_max_train_steps / len(train_dataloader))
     if args.lr_scheduler == "cosine_with_restarts":
         logger.info(f"Using warmup and cosine decay LR scheduler with restarts lr_num_cycles: {args.lr_num_cycles}")
         lr_scheduler = get_cosine_with_hard_restarts_schedule_with_warmup(
-            optimizer,
-            num_warmup_steps=args.lr_warmup_steps * args.gradient_accumulation_steps,
-            num_training_steps=clip_max_train_steps * args.gradient_accumulation_steps,
+            optimizer=optimizer,
+            num_warmup_steps=args.lr_warmup_steps ,
+            num_training_steps=args.clip_max_train_steps ,
             num_cycles=args.lr_num_cycles,
         )
     else:
         lr_scheduler = get_scheduler(
-            args.lr_scheduler,
+            args.clip_lr_scheduler,
             optimizer=optimizer,
-            num_warmup_steps=args.lr_warmup_steps * args.gradient_accumulation_steps,
-            num_training_steps=clip_max_train_steps * args.gradient_accumulation_steps,
+            num_warmup_steps=args.lr_warmup_steps ,
+            num_training_steps=args.clip_max_train_steps ,
         )
+
+    # Prepare everything with our `accelerator`.
+    text_encoder, optimizer, train_dataloader, lr_scheduler = accelerator.prepare(
+        text_encoder, optimizer, train_dataloader, lr_scheduler
+    )
+
 
     # We need to initialize the trackers we use, and also store our configuration.
     # The trackers initializes automatically on the main process.
     if accelerator.is_main_process:
         accelerator.init_trackers("textual_inversion", config=vars(args))
 
-    # Train!
-    total_batch_size = args.train_batch_size * accelerator.num_processes * args.gradient_accumulation_steps
-
-    logger.info("***** Running training *****")
+    logger.info("***** Running CLIP training *****")
     logger.info(f"  Num examples = {len(train_dataset)}")
-    logger.info(f"  Num Epochs = {args.num_train_epochs}")
-    logger.info(f"  Instantaneous batch size per device = {args.train_batch_size}")
-    logger.info(f"  Total train batch size (w. parallel, distributed & accumulation) = {total_batch_size}")
+    logger.info(f"  Instantaneous batch size per device = {args.clip_train_batch_size}")
     logger.info(f"  Gradient Accumulation steps = {args.gradient_accumulation_steps}")
-    logger.info(f"  Total optimization steps = {args.max_train_steps}")
-    global_step = 0
-    first_epoch = 0
+    logger.info(f"  Total optimization steps = {args.clip_max_train_steps}")
+    clip_global_step = 0
 
     # keep original embeddings as reference
     orig_embeds_params = accelerator.unwrap_model(text_encoder).get_input_embeddings().weight.data.clone()
     # assume 49407 max
     index_no_updates = torch.arange(len(tokenizer)) <= 49407
 
-    pbar = tqdm(range(args.clip_train_epochs))
-    for epoch in pbar:
+    if args.clip_phase_gradient_checkpointing:
+        text_encoder.gradient_checkpointing_enable()
+
+    pbar = tqdm(range(args.clip_max_train_steps))
+    pbar.set_description("Steps")
+    for epoch in range(clip_train_epochs):
         text_encoder.train()
         for step, batch in enumerate(train_dataloader):
             # Skip steps until we reach the resumed step
@@ -255,12 +259,21 @@ def main(args):
             lr_scheduler.step()
             optimizer.zero_grad()
 
-            pbar.set_description(f"Epoch {epoch}, loss: {loss.mean().detach().item():.4f}")
+            logs = {"loss": loss.mean().detach().item(), "lr": lr_scheduler.get_last_lr()[0]}
+            pbar.set_postfix(**logs)
+            pbar.set_description(f"Epoch {epoch}")
+            pbar.update(1)
 
             # Let's make sure we don't update any embedding weights besides the newly added token
             with torch.no_grad():
-                accelerator.unwrap_model(text_encoder).get_input_embeddings().weight[index_no_updates] = \
-                orig_embeds_params[index_no_updates]
+
+                accelerator.unwrap_model(text_encoder).get_input_embeddings().weight[index_no_updates] = orig_embeds_params[index_no_updates]
+
+            clip_global_step += 1
+            if clip_global_step >= args.clip_max_train_steps:
+                break
+
+
 
     # Dataset and DataLoaders creation:
     train_dataset = TextualInversionDataset(
@@ -282,16 +295,8 @@ def main(args):
     )
 
     # Scheduler and math around the number of training steps.
-    overrode_max_train_steps = False
-    num_update_steps_per_epoch = math.ceil(len(train_dataloader) / args.gradient_accumulation_steps)
-    if args.max_train_steps is None:
-        args.max_train_steps = args.num_train_epochs * num_update_steps_per_epoch
-        overrode_max_train_steps = True
-
     # We need to recalculate our total training steps as the size of the training dataloader may have changed.
     num_update_steps_per_epoch = math.ceil(len(train_dataloader) / args.gradient_accumulation_steps)
-    if overrode_max_train_steps:
-        args.max_train_steps = args.num_train_epochs * num_update_steps_per_epoch
     # Afterwards we recalculate our number of training epochs
     args.num_train_epochs = math.ceil(args.max_train_steps / num_update_steps_per_epoch)
 
@@ -350,13 +355,13 @@ def main(args):
     )
 
     if args.cache_latents == False:
-        vae = AutoencoderKL.from_pretrained(args.pretrained_model_name_or_path, subfolder="vae", revision=args.revision)
+        vae = AutoencoderKL.from_pretrained(args.pretrained_model_name_or_path, subfolder="vae")
         # Freeze vae and unet
         vae.requires_grad_(False)
         vae.to(accelerator.device, dtype=weight_dtype)
 
     unet = UNet2DConditionModel.from_pretrained(
-        args.pretrained_model_name_or_path, subfolder="unet", revision=args.revision
+        args.pretrained_model_name_or_path, subfolder="unet"
     )
 
     if args.gradient_checkpointing:
@@ -376,8 +381,22 @@ def main(args):
         else:
             raise ValueError("xformers is not available. Make sure it is installed correctly")
 
+
+
     # Load scheduler and models
     noise_scheduler = DDPMScheduler.from_pretrained(args.pretrained_model_name_or_path, subfolder="scheduler")
+
+    total_batch_size = args.train_batch_size * accelerator.num_processes * args.gradient_accumulation_steps
+
+    logger.info("***** Running training *****")
+    logger.info(f"  Num examples = {len(train_dataset)}")
+    logger.info(f"  Num Epochs = {args.num_train_epochs}")
+    logger.info(f"  Instantaneous batch size per device = {args.train_batch_size}")
+    logger.info(f"  Total train batch size (w. parallel, distributed & accumulation) = {total_batch_size}")
+    logger.info(f"  Gradient Accumulation steps = {args.gradient_accumulation_steps}")
+    logger.info(f"  Total optimization steps = {args.max_train_steps}")
+    global_step = 0
+    first_epoch = 0
 
     # Only show the progress bar once on each machine.
     progress_bar = tqdm(range(global_step, args.max_train_steps), disable=not accelerator.is_local_main_process)
@@ -477,7 +496,6 @@ def main(args):
                 args.pretrained_model_name_or_path,
                 text_encoder=accelerator.unwrap_model(text_encoder),
                 tokenizer=tokenizer,
-                revision=args.revision,
                 torch_dtype=weight_dtype,
             )
             pipeline.scheduler = DPMSolverMultistepScheduler.from_config(pipeline.scheduler.config)
