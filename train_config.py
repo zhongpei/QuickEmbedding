@@ -7,14 +7,14 @@ train_args = dict({
 "revision": None,
 "tokenizer_name": None,
 "train_data_dir": "E:\\sdwebui\\stable-diffusion-webui\\QuickEmbedding\\traindata",
-"placeholder_token": "dilitest",
-"initializer_token": "girl",
+"placeholder_token": "nvdi",
+"initializer_token": "dress",
 "learnable_property": "object", # style object
 
 "repeats": 100,
 "output_dir": "text-inversion-model",
 "seed": None,
-"resolution": 512,
+"resolution": 768,
 "center_crop": True,
 
 "clip_train_batch_size": 32,
