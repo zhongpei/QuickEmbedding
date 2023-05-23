@@ -479,6 +479,10 @@ def main(args):
                     save_path = os.path.join(args.output_dir, f"learned_embeds-steps-{global_step}.bin")
                     save_progress(text_encoder, placeholder_token_id, accelerator, args, save_path, subtokens, logger)
 
+                if loss.mean().detach().item() <= args.best_loss:
+                    save_path = os.path.join(args.output_dir, f"learned_embeds-best-{loss.mean().detach().item()}-steps-{global_step}.bin")
+                    save_progress(text_encoder, placeholder_token_id, accelerator, args, save_path, subtokens, logger)
+
                 if global_step % args.checkpointing_steps == 0:
                     if accelerator.is_main_process:
                         save_path = os.path.join(args.output_dir, f"checkpoint-{global_step}")

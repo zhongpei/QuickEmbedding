@@ -24,11 +24,11 @@ train_args = dict({
 "clip_lr_scheduler": "cosine_with_restarts", # linear cosine_with_restarts constant_with_warmup constant
 "spherical_clip_loss": False,
 "clip_max_grad_norm": 1.5,
-"max_train_steps": 50,
+"max_train_steps": 100,
 "gradient_accumulation_steps": 1,
 "gradient_checkpointing": True,
 "train_batch_size": 4,
-"learning_rate": 7.0e-04,
+"learning_rate": 7.0e-04, # "learning_rate": 1.5e-04(constant) 7.0e-04(cosine_with_restarts)
 "scale_lr": False,
 "lr_scheduler": "cosine_with_restarts", # constant cosine_with_restarts constant_with_warmup
 "lr_num_cycles": 4,
@@ -56,6 +56,7 @@ train_args = dict({
 "num_vectors": 1,
 "pad_tokens": True,
 "cache_latents": True,
+"best_loss":0.02
 })
 
 train_args = SimpleNamespace(**train_args)
