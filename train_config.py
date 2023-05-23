@@ -16,19 +16,20 @@ train_args = dict({
 "seed": None,
 "resolution": 512,
 "center_crop": True,
-"clip_train_batch_size": 64,
+
+"clip_train_batch_size": 32,
 "clip_max_train_steps": 400,
-"clip_train_lr": 9.9e-02,
+"clip_train_lr": 1.0e-02,
 "clip_phase_gradient_checkpointing": False,
-"clip_lr_scheduler": "cosine_with_restarts", # linear cosine_with_restarts constant_with_warmup
+"clip_lr_scheduler": "cosine_with_restarts", # linear cosine_with_restarts constant_with_warmup constant
 "spherical_clip_loss": False,
 "clip_max_grad_norm": 1.5,
-"max_train_steps": 100,
-"gradient_accumulation_steps": 4,
+"max_train_steps": 50,
+"gradient_accumulation_steps": 1,
 "gradient_checkpointing": True,
 "train_batch_size": 4,
 "learning_rate": 7.0e-04,
-"scale_lr": True,
+"scale_lr": False,
 "lr_scheduler": "cosine_with_restarts", # constant cosine_with_restarts constant_with_warmup
 "lr_num_cycles": 4,
 "lr_warmup_steps": 0,
@@ -39,7 +40,7 @@ train_args = dict({
 "adam_epsilon": 1e-08,
 "logging_dir": "logs",
 "mixed_precision": "fp16",# fp16 bf16
-"allow_tf32": True,
+"allow_tf32": False,
 "report_to": "wandb", # tensorboard wandb
 "validation_prompt": None,
 "num_validation_images": 4,

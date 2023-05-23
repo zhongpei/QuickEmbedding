@@ -45,7 +45,7 @@ def main(args):
 
     if args.report_to == "wandb":
         import wandb
-        wandb.init(project="textual_inversion",name=f"{args.placeholder_token}")
+        wandb.init(project="textual_inversion", name=f"{args.placeholder_token}")
 
     # Make one log on every process with the configuration for debugging.
     logging.basicConfig(
@@ -176,7 +176,7 @@ def main(args):
 
     # Scheduler and math around the number of training steps.
     clip_train_epochs = math.ceil(args.clip_max_train_steps / len(train_dataloader))
-    if args.lr_scheduler == "cosine_with_restarts":
+    if args.clip_lr_scheduler == "cosine_with_restarts":
         logger.info(f"Using warmup and cosine decay LR scheduler with restarts lr_num_cycles: {args.lr_num_cycles}")
         lr_scheduler = get_cosine_with_hard_restarts_schedule_with_warmup(
             optimizer=optimizer,
@@ -341,13 +341,21 @@ def main(args):
         weight_decay=args.adam_weight_decay,
         eps=args.adam_epsilon,
     )
-
-    lr_scheduler = get_scheduler(
-        args.lr_scheduler,
-        optimizer=optimizer,
-        num_warmup_steps=args.lr_warmup_steps * args.gradient_accumulation_steps,
-        num_training_steps=args.max_train_steps * args.gradient_accumulation_steps,
-    )
+    if args.lr_scheduler == "cosine_with_restarts":
+        logger.info(f"Using warmup and cosine decay LR scheduler with restarts lr_num_cycles: {args.lr_num_cycles}")
+        lr_scheduler = get_cosine_with_hard_restarts_schedule_with_warmup(
+            optimizer=optimizer,
+            num_warmup_steps=args.lr_warmup_steps * args.gradient_accumulation_steps,
+            num_training_steps=args.max_train_steps * args.gradient_accumulation_steps,
+            num_cycles=args.lr_num_cycles,
+        )
+    else:
+        lr_scheduler = get_scheduler(
+            args.lr_scheduler,
+            optimizer=optimizer,
+            num_warmup_steps=args.lr_warmup_steps * args.gradient_accumulation_steps,
+            num_training_steps=args.max_train_steps * args.gradient_accumulation_steps,
+        )
 
     # Prepare everything with our `accelerator`.
     text_encoder, optimizer, train_dataloader, lr_scheduler = accelerator.prepare(
@@ -495,6 +503,7 @@ def main(args):
                 text_encoder=accelerator.unwrap_model(text_encoder),
                 tokenizer=tokenizer,
                 torch_dtype=weight_dtype,
+                local_files_only=True,
             )
             pipeline.scheduler = DPMSolverMultistepScheduler.from_config(pipeline.scheduler.config)
             pipeline = pipeline.to(accelerator.device)
