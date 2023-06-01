@@ -24,7 +24,7 @@ train_args = dict({
 "clip_lr_scheduler": "cosine_with_restarts", # linear cosine_with_restarts constant_with_warmup constant
 "spherical_clip_loss": False,
 "clip_max_grad_norm": 1.5,
-"max_train_steps": 100,
+"max_train_steps": 50,
 "gradient_accumulation_steps": 1,
 "gradient_checkpointing": True,
 "train_batch_size": 4,
@@ -32,7 +32,8 @@ train_args = dict({
 "scale_lr": False,
 "lr_scheduler": "cosine_with_restarts", # constant cosine_with_restarts constant_with_warmup
 "lr_num_cycles": 1,
-"optimizer": "adamw", # adamw dadaptadam
+"optimizer": "dadaptadam", # adamw dadaptadam
+"use_bias_correction": True,
 "lr_warmup_steps": 0,
 "dataloader_num_workers": 0, # set to 0 if this causes issues
 "adam_beta1": 0.9,

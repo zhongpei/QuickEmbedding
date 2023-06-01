@@ -161,6 +161,7 @@ def main(args):
             text_encoder.get_input_embeddings().parameters(),
             lr=1.0,
             decouple=True,
+            use_bias_correction=args.use_bias_correction,
         )
     else:
         raise ValueError(f"Optimizer {args.optimizer} not supported.")
@@ -356,6 +357,7 @@ def main(args):
             text_encoder.get_input_embeddings().parameters(),
             lr=1.0,
             decouple=True,
+            use_bias_correction=args.use_bias_correction,
         )
     else:
         raise ValueError(f"Optimizer {args.optimizer} not supported.")
