@@ -7,8 +7,8 @@ train_args = dict({
 "revision": None,
 "tokenizer_name": None,
 "train_data_dir": "E:\\sdwebui\\stable-diffusion-webui\\QuickEmbedding\\traindata",
-"placeholder_token": "nvdi",
-"initializer_token": "dress",
+"placeholder_token": "zhubao",
+"initializer_token": "jewelry",
 "learnable_property": "object", # style object
 
 "repeats": 100,
@@ -31,7 +31,8 @@ train_args = dict({
 "learning_rate": 7.0e-04, # "learning_rate": 1.5e-04(constant) 7.0e-04(cosine_with_restarts)
 "scale_lr": False,
 "lr_scheduler": "cosine_with_restarts", # constant cosine_with_restarts constant_with_warmup
-"lr_num_cycles": 4,
+"lr_num_cycles": 1,
+"optimizer": "adamw", # adamw dadaptadam
 "lr_warmup_steps": 0,
 "dataloader_num_workers": 0, # set to 0 if this causes issues
 "adam_beta1": 0.9,

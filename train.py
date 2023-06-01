@@ -9,7 +9,8 @@ import torch.nn.functional as F
 from accelerate import Accelerator
 from accelerate.logging import get_logger
 from accelerate.utils import set_seed
-
+import dadaptation.experimental as experimental
+import dadaptation
 from tqdm.auto import tqdm
 from transformers import CLIPTextModelWithProjection, CLIPTokenizer, CLIPVisionModelWithProjection
 
@@ -147,14 +148,22 @@ def main(args):
         )
 
     # Initialize the optimizer
-    optimizer = torch.optim.AdamW(
-        text_encoder.get_input_embeddings().parameters(),
-        lr=args.clip_train_lr,
-        betas=(args.adam_beta1, args.adam_beta2),
-        weight_decay=args.adam_weight_decay,
-        eps=args.adam_epsilon,
-    )
-
+    if args.optimizer.lower() == "adamw":
+        optimizer = torch.optim.AdamW(
+            text_encoder.get_input_embeddings().parameters(),
+            lr=args.learning_rate,
+            betas=(args.adam_beta1, args.adam_beta2),
+            weight_decay=args.adam_weight_decay,
+            eps=args.adam_epsilon,
+        )
+    elif args.optimizer.lower() == "dadaptadam":
+        optimizer = dadaptation.DAdaptAdam(
+            text_encoder.get_input_embeddings().parameters(),
+            lr=1.0,
+            decouple=True,
+        )
+    else:
+        raise ValueError(f"Optimizer {args.optimizer} not supported.")
     # Dataset and DataLoaders creation:
     train_dataset = TextualInversionDataset(
         data_root=args.train_data_dir,
@@ -334,13 +343,23 @@ def main(args):
         weight_dtype = torch.bfloat16
 
     # remake the optimizer
-    optimizer = torch.optim.AdamW(
-        text_encoder.get_input_embeddings().parameters(),
-        lr=args.learning_rate,
-        betas=(args.adam_beta1, args.adam_beta2),
-        weight_decay=args.adam_weight_decay,
-        eps=args.adam_epsilon,
-    )
+    if args.optimizer.lower() == "adamw":
+        optimizer = torch.optim.AdamW(
+            text_encoder.get_input_embeddings().parameters(),
+            lr=args.learning_rate,
+            betas=(args.adam_beta1, args.adam_beta2),
+            weight_decay=args.adam_weight_decay,
+            eps=args.adam_epsilon,
+        )
+    elif args.optimizer.lower() == "dadaptadam":
+        optimizer = dadaptation.DAdaptAdam(
+            text_encoder.get_input_embeddings().parameters(),
+            lr=1.0,
+            decouple=True,
+        )
+    else:
+        raise ValueError(f"Optimizer {args.optimizer} not supported.")
+
     if args.lr_scheduler == "cosine_with_restarts":
         logger.info(f"Using warmup and cosine decay LR scheduler with restarts lr_num_cycles: {args.lr_num_cycles}")
         lr_scheduler = get_cosine_with_hard_restarts_schedule_with_warmup(
